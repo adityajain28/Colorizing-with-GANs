@@ -22,13 +22,9 @@ class BaseModel:
         self.name = options.name
         self.samples_dir = os.path.join(options.checkpoints_path, 'samples')
         self.test_log_file = os.path.join(options.checkpoints_path, 'log_test.dat')
-        #print("Path: ",options.checkpoints_path)
         self.train_log_file = os.path.join(options.checkpoints_path, 'log_train.dat')
         self.global_step = tf.Variable(0, name='global_step', trainable=False)
         self.dataset_train, self.dataset_CNN = self.create_dataset(True)        
-        # self.dataset_CNN = self.create_dataset(True)[1]
-        # print("GT ",len(self.dataset_train))
-        # print("CNN: ", len(self.dataset_CNN))
         self.dataset_test,self.dataset_test_CNN = self.create_dataset(False)
         self.sample_generator = self.dataset_test.generator(options.sample_size, True)
         self.iteration = 0
@@ -54,8 +50,6 @@ class BaseModel:
             progbar = keras.utils.Progbar(total, stateful_metrics=['epoch', 'iteration', 'step'])
             #Added input_CNN in the loop
             for input_rgb, input_CNN in zip(generator,CNNgenerator):
-                #print("in Loop")
-                #print(len(input_rgb))
                 feed_dic = {self.input_rgb: input_rgb,
                             self.input_CNN: input_CNN}
 
@@ -98,7 +92,6 @@ class BaseModel:
             #if self.options.sample and step % self.options.sample_interval == 0:
             #        self.sample(show=False)
             
-            #print("step: ",step)
             if self.options.log:# and step % self.options.log_interval == 0:
                 #print("Logging")
                 with open(self.train_log_file, 'a') as f:
@@ -201,8 +194,6 @@ class BaseModel:
         smoothing = 0.9 if self.options.label_smoothing else 1
         seed = seed = self.options.seed
         kernel = self.options.kernel_size
-        # print("Shape of Kernel: ", kernel)
-        # print("Shape of seed: ", seed)
         self.input_rgb = tf.placeholder(tf.float32, shape=(None, None, None, 3), name='input_rgb')
         #Added this on 27/11 9:52 pm
         self.input_CNN = tf.placeholder(tf.float32, shape=(None, None, None, 3), name='input_CNN')
@@ -212,8 +203,6 @@ class BaseModel:
         print("Shape of input to Gen: ",x.shape)
         gen = gen_factory.create(tf.concat([self.input_gray, self.input_CNN], 3), kernel, seed)
         #Added 27/11 9:52 pm
-        # dis_real = dis_factory.create(tf.concat([self.input_gray, self.input_color]), kernel, seed)
-        # dis_fake = dis_factory.create(tf.concat([self.input_gray, gen]), kernel, seed, reuse_variables=True)
         dis_real = dis_factory.create(tf.concat([self.input_CNN, self.input_color], 3), kernel, seed)
         dis_fake = dis_factory.create(tf.concat([self.input_CNN, gen], 3), kernel, seed, reuse_variables=True)
 
@@ -231,8 +220,7 @@ class BaseModel:
 
         self.sampler = gen_factory.create(tf.concat([gen, self.input_gray], 3), kernel, seed, reuse_variables=True)
         #Added 1/12/2018
-        self.sampler_test = gen_factory.create(tf.concat([self.input_gray,self.input_gray,self.input_gray, self.input_gray], 3), kernel, seed, reuse_variables=True)
-        # self.sampler = gen_factory.create(self.input_gray, kernel, seed, reuse_variables=True)
+        self.sampler_test =  gen_factory.create(tf.concat([gen, self.input_gray], 3), kernel, seed, reuse_variables=True)
         self.accuracy = pixelwise_accuracy(self.input_color, gen, self.options.color_space, self.options.acc_thresh)
         self.learning_rate = tf.constant(self.options.lr)
 

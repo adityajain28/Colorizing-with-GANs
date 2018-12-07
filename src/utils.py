@@ -48,7 +48,6 @@ def imshow(img, title=''):
 
 
 def turingtest( path, count, real_img, fake_img, delay=0):
-    #print("Utils.py")
     height, width, _ = real_img.shape
     imgs = np.array([real_img, (fake_img * 255).astype(np.uint8)])
     real_index = np.random.binomial(1, 0.5)
@@ -59,7 +58,7 @@ def turingtest( path, count, real_img, fake_img, delay=0):
     img.paste(Image.fromarray(imgs[fake_index]), (2 + width, 0))
 
     img.success = 0
-
+    ## The commented code is used for Human Interaction where we display the fake image and the real image to the user and get their responses
     # def onclick(event):
     #     if event.xdata is not None:
     #         if event.x < width and real_index == 0:
@@ -87,7 +86,6 @@ def turingtest( path, count, real_img, fake_img, delay=0):
 
 
 def visualize(train_log_file, test_log_file, window_width, title=''):
-    print("Visualizing")
     train_data = np.loadtxt(train_log_file)
     test_data = np.loadtxt(test_log_file)
 
