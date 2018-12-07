@@ -63,7 +63,7 @@ class Generator(object):
 
             # encoder branch
             for index, kernel in enumerate(self.encoder_kernels):
-
+                #print("kernel size",kernel_size)   
                 name = 'conv' + str(index)
                 output = conv2d(
                     inputs=output,
@@ -74,7 +74,7 @@ class Generator(object):
                     activation=tf.nn.leaky_relu,
                     seed=seed
                 )
-
+                #print("Output: ", output)
                 # save contracting path layers to be used for skip connections
                 layers.append(output)
 

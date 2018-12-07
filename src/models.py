@@ -1,3 +1,4 @@
+
 from __future__ import print_function
 
 import os
@@ -5,13 +6,14 @@ import time
 import numpy as np
 import tensorflow as tf
 
+from tensorflow import keras
 from abc import abstractmethod
 from .networks import Generator, Discriminator
-from .dataset import Places365Dataset, Cifar10Dataset
+from .dataset import Places365Dataset, Cifar10Dataset, CNNDataset
 from .ops import pixelwise_accuracy, preprocess, postprocess
 from .ops import COLORSPACE_RGB, COLORSPACE_LAB
-from .utils import stitch_images, turing_test, imshow, visualize, Progbar
-
+from .utils import stitch_images, turingtest, imshow, visualize
+import matplotlib.pyplot as plt
 
 class BaseModel:
     def __init__(self, sess, options):
@@ -20,10 +22,14 @@ class BaseModel:
         self.name = options.name
         self.samples_dir = os.path.join(options.checkpoints_path, 'samples')
         self.test_log_file = os.path.join(options.checkpoints_path, 'log_test.dat')
+        #print("Path: ",options.checkpoints_path)
         self.train_log_file = os.path.join(options.checkpoints_path, 'log_train.dat')
         self.global_step = tf.Variable(0, name='global_step', trainable=False)
-        self.dataset_train = self.create_dataset(True)
-        self.dataset_test = self.create_dataset(False)
+        self.dataset_train, self.dataset_CNN = self.create_dataset(True)        
+        # self.dataset_CNN = self.create_dataset(True)[1]
+        # print("GT ",len(self.dataset_train))
+        # print("CNN: ", len(self.dataset_CNN))
+        self.dataset_test,self.dataset_test_CNN = self.create_dataset(False)
         self.sample_generator = self.dataset_test.generator(options.sample_size, True)
         self.iteration = 0
         self.epoch = 0
@@ -43,10 +49,15 @@ class BaseModel:
             self.iteration = 0
 
             generator = self.dataset_train.generator(self.options.batch_size)
-            progbar = Progbar(total, width=25, stateful_metrics=['epoch', 'iter', 'step'])
-
-            for input_rgb in generator:
-                feed_dic = {self.input_rgb: input_rgb}
+            #Added 27/11 10:31 pm
+            CNNgenerator = self.dataset_CNN.generator(self.options.batch_size)
+            progbar = keras.utils.Progbar(total, stateful_metrics=['epoch', 'iteration', 'step'])
+            #Added input_CNN in the loop
+            for input_rgb, input_CNN in zip(generator,CNNgenerator):
+                #print("in Loop")
+                #print(len(input_rgb))
+                feed_dic = {self.input_rgb: input_rgb,
+                            self.input_CNN: input_CNN}
 
                 self.iteration = self.iteration + 1
                 self.sess.run([self.dis_train], feed_dict=feed_dic)
@@ -57,7 +68,7 @@ class BaseModel:
 
                 progbar.add(len(input_rgb), values=[
                     ("epoch", epoch + 1),
-                    ("iter", self.iteration),
+                    ("iteration", self.iteration),
                     ("step", step),
                     ("D loss", lossD),
                     ("D fake", lossD_fake),
@@ -67,35 +78,48 @@ class BaseModel:
                     ("G gan", lossG_gan),
                     ("accuracy", acc)
                 ])
-
+                #Commented these and saved the checkpoints later
                 # log model at checkpoints
-                if self.options.log and step % self.options.log_interval == 0:
-                    with open(self.train_log_file, 'a') as f:
-                        f.write('%d %d %f %f %f %f %f %f %f\n' % (self.epoch, step, lossD, lossD_fake, lossD_real, lossG, lossG_l1, lossG_gan, acc))
-
-                    if self.options.visualize:
-                        visualize(self.train_log_file, self.test_log_file, self.options.visualize_window, self.name)
+                
+                #    if self.options.visualize:
+                #        visualize(self.train_log_file, self.test_log_file, self.options.visualize_window, self.name)
 
                 # sample model at checkpoints
-                if self.options.sample and step % self.options.sample_interval == 0:
-                    self.sample(show=False)
+                # if self.options.sample and step % self.options.sample_interval == 0:
+                #     self.sample(show=False)
 
                 # evaluate model at checkpoints
-                if self.options.validate and self.options.validate_interval > 0 and step % self.options.validate_interval == 0:
-                    self.evaluate()
+                # if self.options.validate and self.options.validate_interval > 0 and step % self.options.validate_interval == 0:
+                #     self.evaluate()
 
                 # save model at checkpoints
-                if self.options.save and step % self.options.save_interval == 0:
-                    self.save()
+                # if self.options.save and step % self.options.save_interval == 0:
+                #     self.save()
+            #if self.options.sample and step % self.options.sample_interval == 0:
+            #        self.sample(show=False)
+            
+            #print("step: ",step)
+            if self.options.log:# and step % self.options.log_interval == 0:
+                #print("Logging")
+                with open(self.train_log_file, 'a') as f:
+                    f.write('%d %d %f %f %f %f %f %f %f\n' % (self.epoch, step, lossD, lossD_fake, lossD_real, lossG, lossG_l1, lossG_gan, acc))
+            if self.options.save:# and step % self.options.save_interval == 0:
+                #print("saving")
+                self.save()
+            
+            if self.options.visualize:
+                visualize(self.train_log_file, self.test_log_file, self.options.visualize_window, self.name)
+                #if self.options.validate:
+                #    self.evaluate()
 
-            if self.options.validate:
-                self.evaluate()
+
+        self.save()
 
     def evaluate(self):
         print('\n\nEvaluating epoch: %d' % self.epoch)
         test_total = len(self.dataset_test)
         test_generator = self.dataset_test.generator(self.options.batch_size)
-        progbar = Progbar(test_total, width=25)
+        progbar = keras.utils.Progbar(test_total)
 
         result = []
 
@@ -144,18 +168,24 @@ class BaseModel:
 
     def turing_test(self):
         batch_size = self.options.batch_size
-        gen = self.dataset_test.generator(batch_size, True)
+        gen = self.dataset_test.generator(batch_size, False)
+        CNNgen = self.dataset_test_CNN.generator(batch_size, False)
+
         count = 0
         score = 0
-
+        fig  = plt.figure()
         while count < self.options.test_size:
             input_rgb = next(gen)
-            feed_dic = {self.input_rgb: input_rgb}
-            fake_image = self.sess.run(self.sampler, feed_dict=feed_dic)
-            fake_image = postprocess(tf.convert_to_tensor(fake_image), colorspace_in=self.options.color_space, colorspace_out=COLORSPACE_RGB)
+            input_CNN = next(CNNgen)
+            feed_dic = {self.input_rgb: input_rgb, self.input_CNN: input_CNN}
 
+            fake_image = self.sess.run(self.sampler_test, feed_dict=feed_dic)
+            
+            fake_image = postprocess(tf.convert_to_tensor(fake_image), colorspace_in=self.options.color_space, colorspace_out=COLORSPACE_RGB)
+        
             for i in range(np.min([batch_size, self.options.test_size - count])):
-                res = turing_test(input_rgb[i], fake_image.eval()[i], self.options.test_delay)
+                print("Going to Utils.py")
+                res = turingtest( self.options.dataset_path, count, input_rgb[i], fake_image.eval()[i], self.options.test_delay)
                 count += 1
                 score += res
                 print('success: %d - fail: %d - rate: %f' % (score, count - score, (count - score) / count))
@@ -169,16 +199,23 @@ class BaseModel:
         gen_factory = self.create_generator()
         dis_factory = self.create_discriminator()
         smoothing = 0.9 if self.options.label_smoothing else 1
-        seed = self.options.seed
+        seed = seed = self.options.seed
         kernel = self.options.kernel_size
-
+        # print("Shape of Kernel: ", kernel)
+        # print("Shape of seed: ", seed)
         self.input_rgb = tf.placeholder(tf.float32, shape=(None, None, None, 3), name='input_rgb')
+        #Added this on 27/11 9:52 pm
+        self.input_CNN = tf.placeholder(tf.float32, shape=(None, None, None, 3), name='input_CNN')
         self.input_gray = tf.image.rgb_to_grayscale(self.input_rgb)
         self.input_color = preprocess(self.input_rgb, colorspace_in=COLORSPACE_RGB, colorspace_out=self.options.color_space)
-
-        gen = gen_factory.create(self.input_gray, kernel, seed)
-        dis_real = dis_factory.create(tf.concat([self.input_gray, self.input_color], 3), kernel, seed)
-        dis_fake = dis_factory.create(tf.concat([self.input_gray, gen], 3), kernel, seed, reuse_variables=True)
+        x = tf.concat([self.input_gray, self.input_CNN], 3)
+        print("Shape of input to Gen: ",x.shape)
+        gen = gen_factory.create(tf.concat([self.input_gray, self.input_CNN], 3), kernel, seed)
+        #Added 27/11 9:52 pm
+        # dis_real = dis_factory.create(tf.concat([self.input_gray, self.input_color]), kernel, seed)
+        # dis_fake = dis_factory.create(tf.concat([self.input_gray, gen]), kernel, seed, reuse_variables=True)
+        dis_real = dis_factory.create(tf.concat([self.input_CNN, self.input_color], 3), kernel, seed)
+        dis_fake = dis_factory.create(tf.concat([self.input_CNN, gen], 3), kernel, seed, reuse_variables=True)
 
         gen_ce = tf.nn.sigmoid_cross_entropy_with_logits(logits=dis_fake, labels=tf.ones_like(dis_fake))
         dis_real_ce = tf.nn.sigmoid_cross_entropy_with_logits(logits=dis_real, labels=tf.ones_like(dis_real) * smoothing)
@@ -192,13 +229,16 @@ class BaseModel:
         self.gen_loss_l1 = tf.reduce_mean(tf.abs(self.input_color - gen)) * self.options.l1_weight
         self.gen_loss = self.gen_loss_gan + self.gen_loss_l1
 
-        self.sampler = gen_factory.create(self.input_gray, kernel, seed, reuse_variables=True)
+        self.sampler = gen_factory.create(tf.concat([gen, self.input_gray], 3), kernel, seed, reuse_variables=True)
+        #Added 1/12/2018
+        self.sampler_test = gen_factory.create(tf.concat([self.input_gray,self.input_gray,self.input_gray, self.input_gray], 3), kernel, seed, reuse_variables=True)
+        # self.sampler = gen_factory.create(self.input_gray, kernel, seed, reuse_variables=True)
         self.accuracy = pixelwise_accuracy(self.input_color, gen, self.options.color_space, self.options.acc_thresh)
         self.learning_rate = tf.constant(self.options.lr)
 
         # learning rate decay
-        if self.options.lr_decay and self.options.lr_decay_rate > 0:
-            self.learning_rate = tf.maximum(1e-6, tf.train.exponential_decay(
+        if self.options.lr_decay_rate > 0:
+            self.learning_rate = tf.maximum(1e-8, tf.train.exponential_decay(
                 learning_rate=self.options.lr,
                 global_step=self.global_step,
                 decay_steps=self.options.lr_decay_steps,
@@ -230,7 +270,7 @@ class BaseModel:
 
     def save(self):
         print('saving model...\n')
-        self.saver.save(self.sess, os.path.join(self.options.checkpoints_path, 'CGAN_' + self.options.dataset), write_meta_graph=False)
+        self.saver.save(self.sess, os.path.join(self.options.checkpoints_path, 'Colorizing_' + self.options.dataset), write_meta_graph=False)
 
     def eval_outputs(self, feed_dic):
         '''
@@ -261,11 +301,15 @@ class BaseModel:
     @abstractmethod
     def create_dataset(self, training):
         raise NotImplementedError
+    
+    @abstractmethod
+    def create_dataset_test(self, training):
+        raise NotImplementedError
 
 
 class Cifar10Model(BaseModel):
     def __init__(self, sess, options):
-        super(Cifar10Model, self).__init__(sess, options)
+        super( Cifar10Model, self).__init__(sess, options)
 
     def create_generator(self):
         kernels_gen_encoder = [
@@ -296,6 +340,12 @@ class Cifar10Model(BaseModel):
         return Discriminator('dis', kernels_dis)
 
     def create_dataset(self, training=True):
+        return Cifar10Dataset(
+            path=self.options.dataset_path,
+            training=training,
+            augment=self.options.augment)
+
+    def create_dataset_test(self, training=True):
         return Cifar10Dataset(
             path=self.options.dataset_path,
             training=training,
@@ -342,9 +392,17 @@ class Places365Model(BaseModel):
         ]
 
         return Discriminator('dis', kernels_dis)
+    def create_dataset_test(self, training=True):
+        return Places365Dataset(
+            path=self.options.dataset_path,
+            training=training,
+            augment=self.options.augment)
 
     def create_dataset(self, training=True):
         return Places365Dataset(
+            path=self.options.dataset_path,
+            training=training,
+            augment=self.options.augment),CNNDataset(
             path=self.options.dataset_path,
             training=training,
             augment=self.options.augment)

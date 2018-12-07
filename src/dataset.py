@@ -1,4 +1,3 @@
-import os
 import glob
 import numpy as np
 import tensorflow as tf
@@ -73,7 +72,7 @@ class BaseDataset():
     def data(self):
         if len(self._data) == 0:
             self._data = self.load()
-            np.random.shuffle(self._data)
+            #np.random.shuffle(self._data)
 
         return self._data
 
@@ -116,20 +115,28 @@ class Places365Dataset(BaseDataset):
         super(Places365Dataset, self).__init__(PLACES365_DATASET, path, training, augment)
 
     def load(self):
+        print("Dataset Path: ", self.path+'/data_256/*.JPEG')
         if self.training:
-            flist = os.path.join(self.path, 'train.flist')
-            if os.path.exists(flist):
-                data = np.loadtxt(flist, dtype=np.str)
-            else:
-                data = glob.glob(self.path + '/data_256/**/*.jpg', recursive=True)
-                np.savetxt(flist, data, fmt='%s')
-
+            data = np.array(
+                glob.glob(self.path + '/data_256/*.jpg', recursive=True))
+            print("places365: ",len(data))
         else:
-            flist = os.path.join(self.path, 'test.flist')
-            if os.path.exists(flist):
-                data = np.loadtxt(flist, dtype=np.str)
-            else:
-                data = np.array(glob.glob(self.path + '/val_256/*.jpg'))
-                np.savetxt(flist, data, fmt='%s')
+            data = np.array(glob.glob(self.path + '/val_256/*.jpg'))
+
+        return data
+
+#Added
+class CNNDataset(BaseDataset):
+    def __init__(self, path, training=True, augment=True):
+        super(CNNDataset, self).__init__(PLACES365_DATASET, path, training, augment)
+
+    def load(self):
+        print("Dataset Path: ", self.path+'/CNN/*.JPEG')
+        if self.training:
+            data = np.array(
+                glob.glob(self.path + '/CNN/*.jpg', recursive=True))
+            print("CNN: ",len(data))
+        else:
+            data = np.array(glob.glob(self.path + '/val_256/*.jpg'))
 
         return data

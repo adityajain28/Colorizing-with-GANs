@@ -1,0 +1,8 @@
+python train.py --seed 100 --dataset places365 --dataset-path ./dataset/places365 --checkpoints-path ./checkpoints --batch-size 10 --epochs 200 --lr 3e-4 --label-smoothing 1
+
+
+python train.py --seed 100 --dataset places365 --dataset-path ./dataset/places365 --checkpoints-path ./checkpoints --batch-size 10 --epochs 200 --lr 3e-4 --label-smoothing 1 --lr-decay-steps 1e4 --augment True
+
+    python test-turing.py --dataset places365 --dataset-path ./dataset/places365 --checkpoints-path ./checkpoints/places365
+
+    
